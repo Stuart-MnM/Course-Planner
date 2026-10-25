@@ -174,8 +174,12 @@ hr{border:none;border-top:1px solid var(--border);margin:1rem 0;}
   <h1 class="home-title">Stuart's Course<br/>Planner</h1>
   <p class="home-sub">Timor Omnis Abesto<br/>Walk it first. Plan every hole.</p>
   <div class="card home-card">
-    <div class="lbl">Your Courses</div>
-    <div id="home-course-list"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+      <div class="lbl" style="margin:0;">Your Courses <span id="home-course-count" style="text-transform:none;letter-spacing:0;"></span></div>
+      <button id="home-course-toggle" class="btn-sm" style="background:var(--faint);border:1px solid var(--border);color:var(--accent);"
+              onclick="toggleCourseList()" aria-expanded="true">▲ Hide</button>
+    </div>
+    <div id="home-course-list" style="margin-top:.4rem;"></div>
   </div>
   <div class="home-btns">
     <button class="btn btn-primary" onclick="nav('walk')">🚶 Walk a Course</button>
@@ -476,6 +480,20 @@ function nav(id){
 }
 
 // ════════════════════════════════════════════════════════════ HOME ════════════
+let courseListOpen=true;
+try{courseListOpen=localStorage.getItem('cpp_list_open')!=='0';}catch(e){}
+function applyCourseListState(){
+  document.getElementById('home-course-list').style.display=courseListOpen?'block':'none';
+  const b=document.getElementById('home-course-toggle');
+  b.textContent=courseListOpen?'▲ Hide':'▼ Show';
+  b.setAttribute('aria-expanded',courseListOpen?'true':'false');
+  document.getElementById('home-course-count').textContent='('+courses.length+')';
+}
+function toggleCourseList(){
+  courseListOpen=!courseListOpen;
+  try{localStorage.setItem('cpp_list_open',courseListOpen?'1':'0');}catch(e){}
+  applyCourseListState();
+}
 function initHome(){
   document.getElementById('home-course-list').innerHTML=courses.map((c,i)=>{
     const total=c.holes.length;
@@ -495,6 +513,7 @@ function initHome(){
       <div class="bar-track" style="margin-top:.45rem;"><div class="bar-fill" style="width:${pct}%;background:var(--greenlt);"></div></div>
     </div>`;
   }).join('');
+  applyCourseListState();
 }
 function walkCourse(i){
   nav('walk');

@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Caddy Course Planner ⛳</title>
+
+<!-- iOS PWA — makes it open as standalone app, no Safari bar -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Course Planner"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0a1a0c"/>
+
+<!-- Home screen icon — generated as inline SVG data URI so no external file needed -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230a1a0c'/%3E%3Ccircle cx='90' cy='75' r='28' fill='%231565c0'/%3E%3Crect x='88' y='75' width='4' height='55' fill='%23a5d6a7'/%3E%3Crect x='72' y='126' width='36' height='6' rx='3' fill='%23a5d6a7'/%3E%3Cpath d='M92 47 L112 68 L92 68 Z' fill='%23a5d6a7'/%3E%3C/svg%3E"/>
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;1,400&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#0a1a0c;--bg2:#111f13;--bg3:#182a1a;
+  --green:#2e7d32;--greenlt:#43a047;--accent:#a5d6a7;
+  --text:#e8f5e9;--muted:#6a9970;--faint:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.10);--red:#c62828;--amber:#f57f17;--gold:#f9a825;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Source Sans 3',sans-serif;min-height:100vh;overflow-x:hidden;
+     padding-top:env(safe-area-inset-top);
+     padding-bottom:env(safe-area-inset-bottom);
+     padding-left:env(safe-area-inset-left);
+     padding-right:env(safe-area-inset-right);}
+h1,h2,h3{font-family:'Playfair Display',serif;}
+.screen{display:none;}.screen.active{display:block;}
+.wrap{max-width:500px;margin:0 auto;padding:1rem 1rem 2rem;}
+.card{background:var(--faint);border:1px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1rem;}
+.lbl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:.35rem;}
+input,select,textarea{width:100%;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.55rem .75rem;font-size:.92rem;outline:none;font-family:'Source Sans 3',sans-serif;}
+textarea{resize:vertical;line-height:1.55;}
+select{appearance:none;cursor:pointer;}
+input:focus,select:focus,textarea:focus{border-color:var(--greenlt);}
+hr{border:none;border-top:1px solid var(--border);margin:1rem 0;}
+.btn{display:block;width:100%;padding:.85rem;border:none;border-radius:12px;font-family:'Source Sans 3',sans-serif;font-size:1rem;font-weight:600;cursor:pointer;text-align:center;transition:opacity .15s;margin-bottom:.5rem;}
+.btn:hover{opacity:.88;}
+.btn-primary{background:linear-gradient(135deg,var(--green),var(--greenlt));color:#fff;box-shadow:0 4px 18px rgba(67,160,71,.3);}
+.btn-secondary{background:var(--faint);border:1px solid var(--border);color:var(--accent);}
+.btn-danger{background:rgba(198,40,40,.15);border:1px solid rgba(198,40,40,.3);color:#ef9a9a;}
+.btn-amber{background:rgba(245,127,23,.15);border:1px solid rgba(245,127,23,.3);color:#ffe082;}
+.btn-sm{padding:.45rem .9rem;font-size:.82rem;border-radius:8px;border:none;cursor:pointer;font-family:'Source Sans 3',sans-serif;font-weight:600;}
+.tog-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem;}
+.tog{flex:1;padding:.5rem .3rem;border-radius:8px;font-size:.78rem;font-weight:600;cursor:pointer;border:1px solid transparent;background:var(--faint);color:#aaa;transition:all .15s;white-space:nowrap;text-align:center;}
+.tog.active-green{background:#1b5e20;border-color:#43a047;color:#c8e6c9;}
+.tog.active-red{background:#7f1717;border-color:#c62828;color:#ffcdd2;}
+.tog.active-amber{background:#6d3b00;border-color:#f57f17;color:#ffe0b2;}
+.tog.active-blue{background:#0d3b6e;border-color:#1976d2;color:#bbdefb;}
+.tog.active-grey{background:#2a2a2a;border-color:#666;color:#ccc;}
+.putts-row,.score-row{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;}
+.putts-num,.score-num{font-family:'Playfair Display',serif;font-size:2.4rem;min-width:2.5rem;text-align:center;}
+.putts-num{color:var(--accent);}
+.adj-btn{background:var(--faint);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:1.5rem;width:42px;height:42px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.score-eagle{color:#f9a825;}.score-birdie{color:#4ade80;}.score-par{color:#e8f5e9;}
+.score-bogey{color:#fb923c;}.score-double{color:#f87171;}.score-worse{color:#c62828;}
+.dots{display:flex;gap:4px;flex-wrap:wrap;max-width:200px;}
+.dot{width:13px;height:13px;border-radius:50%;cursor:pointer;transition:all .2s;}
+.dot-done{background:var(--greenlt);}.dot-active{background:#fff;border:2px solid var(--greenlt);}.dot-todo{background:rgba(255,255,255,.15);}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;padding:.75rem 0;margin-bottom:.75rem;border-bottom:1px solid var(--border);}
+.hole-header{display:flex;align-items:flex-end;gap:1rem;margin-bottom:1rem;}
+.hole-num{font-family:'Playfair Display',serif;font-size:clamp(3rem,12vw,5rem);font-weight:900;line-height:1;color:var(--accent);letter-spacing:-.04em;}
+.par-badge{display:inline-block;border-radius:20px;padding:.2rem .7rem;font-size:.8rem;font-weight:700;color:#0c1a0e;margin-bottom:.2rem;}
+.par3{background:#60a5fa;}.par4{background:#a3e635;}.par5{background:#fb923c;}
+.yards-si{color:var(--muted);font-size:.85rem;}
+.strat-box{background:rgba(255,255,255,.04);border:1px solid var(--border);border-left:3px solid var(--greenlt);border-radius:10px;padding:1rem;margin-bottom:1.2rem;}
+.strat-lbl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.4rem;}
+.strat-text{color:var(--text);font-size:.9rem;line-height:1.6;font-style:italic;}
+.strat-empty{color:var(--muted);font-size:.85rem;font-style:italic;}
+.sec{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.55rem;}
+.sc-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.sc-table th{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:.5rem .3rem;text-align:center;border-bottom:1px solid rgba(255,255,255,.15);}
+.sc-table td{padding:.5rem .3rem;text-align:center;border-bottom:1px solid var(--border);cursor:pointer;}
+.sc-table tr:hover td{background:rgba(255,255,255,.03);}
+.td-hole{color:var(--muted);font-weight:700;text-align:left;}
+.td-par{border-radius:12px;padding:.15rem .5rem;font-weight:700;font-size:.78rem;}
+.hit{color:#4ade80;}.miss{color:#f87171;}.ml{color:#fb923c;}.mr{color:#60a5fa;}
+.sr-dot{display:inline-block;width:10px;height:10px;border-radius:50%;}
+#home{background:radial-gradient(ellipse at 30% 20%,#1a3320 0%,var(--bg) 65%);}
+.home-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem;}
+.home-title{font-size:clamp(2rem,6vw,3.5rem);color:var(--accent);text-align:center;margin-bottom:.2rem;line-height:1.05;}
+.home-sub{color:var(--muted);text-align:center;font-style:italic;margin-bottom:1.5rem;}
+.home-card,.home-btns{width:100%;max-width:420px;}
+.home-btns{display:flex;flex-direction:column;gap:.5rem;margin-top:.25rem;}
+.hole-setup-row{display:grid;grid-template-columns:1.8rem 3rem 3.5rem 2.8rem 1fr;gap:.4rem;align-items:center;padding:.45rem 0;border-bottom:1px solid var(--border);font-size:.85rem;}
+.hole-setup-row input{padding:.3rem .4rem;font-size:.8rem;text-align:center;}
+.setup-hdr{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:.3rem 0 .5rem;border-bottom:1px solid rgba(255,255,255,.15);display:grid;grid-template-columns:1.8rem 3rem 3.5rem 2.8rem 1fr;gap:.4rem;}
+.nav-row{display:flex;gap:.5rem;margin-top:.6rem;margin-bottom:1rem;}
+.nav-btn{flex:1;padding:.6rem;background:var(--faint);border:1px solid var(--border);border-radius:8px;color:#ccc;font-size:.82rem;cursor:pointer;text-align:center;}
+.nav-btn:disabled{color:#444;cursor:default;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin:1rem 0;}
+.stat-card{background:var(--faint);border:1px solid var(--border);border-radius:12px;padding:.85rem .6rem;text-align:center;}
+.stat-val{font-family:'Playfair Display',serif;font-size:1.7rem;color:var(--accent);}
+.stat-lbl{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:.1rem;}
+.back-link{display:inline-flex;align-items:center;gap:.4rem;color:var(--muted);font-size:.85rem;cursor:pointer;margin-bottom:.75rem;}
+.back-link:hover{color:var(--accent);}
+.spacer{height:.75rem;}
+/* History */
+.hist-round{background:var(--faint);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:.75rem;}
+.hist-round:hover{border-color:var(--greenlt);}
+.hist-title{font-weight:600;color:var(--accent);margin-bottom:.2rem;}
+.hist-meta{font-size:.8rem;color:var(--muted);}
+.hist-stats{display:flex;gap:1rem;margin-top:.5rem;flex-wrap:wrap;align-items:center;}
+.hist-stat{font-size:.8rem;color:var(--text);}
+.hist-stat span{color:var(--muted);font-size:.72rem;}
+.bar-wrap{margin-bottom:.6rem;}
+.bar-label-row{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:.2rem;}
+.bar-track{height:7px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;transition:width .5s ease;}
+.hs-table{width:100%;border-collapse:collapse;font-size:.78rem;}
+.hs-table th{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:.4rem .3rem;text-align:center;border-bottom:1px solid rgba(255,255,255,.15);}
+.hs-table td{padding:.4rem .3rem;text-align:center;border-bottom:1px solid var(--border);}
+.paste-area{font-family:'Courier New',monospace;font-size:.78rem;background:rgba(0,0,0,.4);color:#c8e6c9;border-color:rgba(67,160,71,.3);}
+.format-hint{background:rgba(0,0,0,.3);border-left:3px solid var(--greenlt);padding:.75rem;border-radius:6px;font-size:.76rem;color:var(--muted);margin-bottom:.75rem;line-height:1.7;}
+.format-hint code{color:var(--accent);font-family:'Courier New',monospace;}
+.adj-banner{background:rgba(245,127,23,.1);border:1px solid rgba(245,127,23,.3);border-radius:10px;padding:.85rem;margin-bottom:.75rem;}
+.adj-banner-title{font-size:.75rem;color:#ffe082;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;}
+.adj-item{font-size:.82rem;color:#ffe0b2;margin-bottom:.75rem;line-height:1.5;border-bottom:1px solid rgba(255,255,255,.07);padding-bottom:.6rem;}
+.adj-item:last-of-type{border-bottom:none;margin-bottom:0;}
+.adj-item strong{color:#fff;}
+.adj-tag{display:inline-block;border-radius:12px;padding:.1rem .5rem;font-size:.72rem;font-weight:700;margin-bottom:.3rem;}
+.tag-adjusted{background:rgba(245,127,23,.25);color:#ffe082;}
+.tag-wrong{background:rgba(198,40,40,.25);color:#ffcdd2;}
+.tag-applied{background:rgba(67,160,71,.2);color:#a5d6a7;}
+/* Round control buttons */
+.round-ctrl{display:flex;gap:.4rem;margin-top:.3rem;}
+.ctrl-btn{font-size:.7rem;background:none;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:.28rem .55rem;cursor:pointer;white-space:nowrap;}
+.ctrl-edit{color:#6a9970;}.ctrl-edit:hover{color:var(--accent);border-color:rgba(165,214,167,.3);}
+.ctrl-cancel{color:#8a5a5a;}.ctrl-cancel:hover{color:#f87171;border-color:rgba(248,113,113,.3);}
+/* Handicap */
+.hcap-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;}
+.ch-badge{background:rgba(249,168,37,.12);border:1px solid rgba(249,168,37,.25);border-radius:8px;padding:.5rem .75rem;font-size:.82rem;color:#ffe082;margin-top:.5rem;line-height:1.5;}
+/* Hole highlights */
+.highlight-section{margin-bottom:1.25rem;}
+.hl-row{display:flex;gap:.5rem;margin-bottom:.4rem;align-items:center;}
+.hl-badge{font-size:.72rem;font-weight:700;border-radius:10px;padding:.15rem .55rem;min-width:2.2rem;text-align:center;}
+.hl-good{background:rgba(74,222,128,.15);color:#4ade80;border:1px solid rgba(74,222,128,.25);}
+.hl-bad{background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.25);}
+.hl-text{font-size:.82rem;color:var(--text);}
+.hl-sub{font-size:.72rem;color:var(--muted);}
+.mic-listening{background:#c62828!important;color:#fff!important;
+  border-color:#e53935!important;
+  animation:mpulse 1.2s ease-in-out infinite;}
+@keyframes mpulse{
+  0%,100%{box-shadow:0 0 0 3px rgba(198,40,40,.25);}
+  50%{box-shadow:0 0 0 8px rgba(198,40,40,.05);}
+}
+/* Scrambling */
+.scramble-row{display:flex;gap:.5rem;margin-bottom:1rem;align-items:center;}
+.scramble-hint{font-size:.75rem;color:var(--muted);font-style:italic;}
+/* Hole override */
+.override-box{background:rgba(249,168,37,.08);border:1px solid rgba(249,168,37,.25);
+  border-radius:10px;padding:.75rem;margin-bottom:1rem;}
+.override-title{font-size:.72rem;color:#ffe082;text-transform:uppercase;
+  letter-spacing:.08em;margin-bottom:.5rem;}
+.override-active{background:rgba(249,168,37,.15);border-color:rgba(249,168,37,.5);}
+.override-badge{display:inline-block;background:rgba(249,168,37,.2);border:1px solid rgba(249,168,37,.4);
+  border-radius:6px;padding:.15rem .5rem;font-size:.75rem;color:#ffe082;margin-left:.5rem;}
+</style>
+</head>
+<body>
+
+<!-- ══ HOME ═══════════════════════════════════════════════════════════════════ -->
+<div id="home" class="screen active">
+<div class="home-wrap">
+  <div style="font-size:3.2rem;margin-bottom:.3rem;">⛳</div>
+  <h1 class="home-title">Stuart's Course<br/>Planner</h1>
+  <p class="home-sub">Timor Omnis Abesto<br/>Walk it first. Plan every hole.</p>
+  <div class="card home-card">
+    <div class="lbl">Your Courses</div>
+    <div id="home-course-list"></div>
+  </div>
+  <div class="home-btns">
+    <button class="btn btn-primary" onclick="nav('walk')">🚶 Walk a Course</button>
+    <button class="btn btn-secondary" onclick="nav('course-setup')">🏌️ Manage Courses &amp; Strategies</button>
+    <button class="btn btn-secondary" onclick="nav('exportimport')">💾 Export / Import</button>
+  </div>
+  <div style="margin-top:1.5rem;font-size:.72rem;color:var(--muted);text-align:center;font-style:italic;">
+    © Stuart McNab Minton 2026. All rights reserved.
+  </div>
+</div>
+</div>
+
+<!-- ══ COURSE SETUP ════════════════════════════════════════════════════════════ -->
+<div id="course-setup" class="screen">
+<div class="wrap">
+  <div class="back-link" onclick="nav('home')">← Home</div>
+  <h2 style="margin-bottom:.25rem;">Course Manager</h2>
+  <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem;">Edit hole details, strategies, ratings, or paste-import from a spreadsheet.</p>
+  <div class="card">
+    <div class="lbl">Course</div>
+    <div style="display:flex;gap:.5rem;margin-bottom:.75rem;">
+      <select id="cs-sel" style="flex:1" onchange="csCourseChanged()"></select>
+      <button class="btn-sm btn-primary" onclick="addNewCourse()">+ New</button>
+    </div>
+    <div class="lbl">Course Name</div>
+    <input type="text" id="cs-name" placeholder="Course name" style="margin-bottom:.75rem;"/>
+    <!-- Course rating, slope and par -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:.75rem;">
+      <div><div class="lbl">Course Rating</div>
+        <input type="number" id="cs-cr" min="55" max="80" step="0.1" placeholder="e.g. 71.5" style="text-align:center;"/></div>
+      <div><div class="lbl">Slope Rating</div>
+        <input type="number" id="cs-slope" min="55" max="155" step="1" placeholder="e.g. 125" style="text-align:center;"/></div>
+      <div><div class="lbl">Course Par</div>
+        <input type="number" id="cs-par" min="60" max="80" step="1" placeholder="e.g. 72" style="text-align:center;"/>
+        <div id="cs-par-hint" style="font-size:.68rem;color:var(--muted);margin-top:.2rem;text-align:center;"></div>
+      </div>
+    </div>
+    <!-- GPS coordinates for satellite map -->
+    <div style="font-size:.75rem;color:var(--muted);margin-bottom:.4rem;line-height:1.5;">
+      📍 <strong style="color:var(--accent);">Course Location</strong> — used for the satellite map in Practice Walk.
+      Find on Google Maps: right-click the course → copy coordinates.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.75rem;">
+      <div><div class="lbl">Latitude</div>
+        <input type="number" id="cs-lat" step="0.000001" placeholder="e.g. 37.3891" style="text-align:center;"/></div>
+      <div><div class="lbl">Longitude</div>
+        <input type="number" id="cs-lng" step="0.000001" placeholder="e.g. -2.1608" style="text-align:center;"/></div>
+    </div>
+    <button class="btn btn-primary" style="margin-bottom:0;" onclick="saveCourse()">💾 Save Course</button>
+  </div>
+  <div class="card">
+    <div style="font-weight:600;color:var(--accent);margin-bottom:.5rem;">📋 Paste Import from Spreadsheet</div>
+    <div class="format-hint">
+      Copy rows from Excel / Google Sheets:<br/>
+      <code>Hole | Par | Yards | SI | Strategy (optional)</code><br/>
+      Tab-separated (paste direct) or comma-separated. One row per hole.
+    </div>
+    <div class="lbl">Paste data here</div>
+    <textarea id="cs-paste" class="paste-area" rows="5"
+      placeholder="1&#9;4&#9;380&#9;11&#9;Drive left-centre…&#10;2&#9;4&#9;355&#9;13&#9;3-wood off tee…"></textarea>
+    <div class="spacer"></div>
+    <button class="btn btn-amber" onclick="parsePaste()">⬆ Import Pasted Data</button>
+    <div id="cs-paste-msg" style="font-size:.8rem;margin-top:.4rem;"></div>
+  </div>
+  <div class="card">
+    <div style="font-weight:600;color:var(--accent);margin-bottom:.75rem;">Hole Details</div>
+    <div class="setup-hdr"><span>#</span><span>Par</span><span>Yards</span><span>SI</span><span>Strategy (tap to edit)</span></div>
+    <div id="cs-hole-rows"></div>
+  </div>
+  <div id="cs-strat-editor" style="display:none;" class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+      <div class="lbl" id="cs-strat-title" style="margin:0;"></div>
+      <button class="btn-sm" style="background:var(--faint);border:1px solid var(--border);color:var(--accent);" onclick="closeStratEditor()">✓ Done</button>
+    </div>
+    <textarea id="cs-strat-text" rows="5" placeholder="Describe the strategy for this hole…"></textarea>
+  </div>
+  <button class="btn btn-danger" onclick="deleteCourse()">🗑 Delete This Course</button>
+</div>
+</div>
+
+<!-- ══ WALK THE COURSE ═════════════════════════════════════════════════════════ -->
+<div id="walk" class="screen">
+<div class="wrap">
+
+  <div id="walk-sel-panel">
+    <div class="back-link" onclick="nav('home')">← Home</div>
+    <h2 style="margin-bottom:.25rem;">🚶 Walk the Course</h2>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem;line-height:1.55;">
+      Walk hole by hole and record your strategy notes as you go.
+      Everything saves automatically as you move between holes.
+    </p>
+    <div class="card">
+      <div class="lbl">Select Course to Walk</div>
+      <select id="walk-course-sel" style="margin-bottom:.75rem;"></select>
+      <button class="btn btn-primary" onclick="startWalk()">Start Walking →</button>
+    </div>
+  </div>
+
+  <div id="walk-play-panel" style="display:none;">
+
+    <div class="topbar">
+      <div>
+        <div style="color:var(--muted);font-style:italic;font-size:.85rem;" id="walk-course-name"></div>
+        <div style="font-size:.75rem;color:#4a7c59;" id="walk-progress-txt"></div>
+      </div>
+      <div class="dots" id="walk-dots"></div>
+    </div>
+
+    <div class="hole-header">
+      <div class="hole-num" id="walk-holenum"></div>
+      <div>
+        <div id="walk-par-badge" class="par-badge"></div>
+        <div class="yards-si" id="walk-yards-si"></div>
+      </div>
+      <!-- Satellite map button — only shows if course has GPS coordinates -->
+      <div id="walk-map-btn-wrap" style="display:none;margin-left:auto;align-self:center;">
+        <button onclick="toggleMap()"
+          id="walk-map-btn"
+          style="background:rgba(255,255,255,.08);border:1px solid var(--border);
+                 border-radius:8px;color:var(--accent);padding:.45rem .8rem;
+                 font-size:.82rem;font-weight:600;cursor:pointer;
+                 font-family:'Source Sans 3',sans-serif;">
+          🛰 View Map
+        </button>
+      </div>
+    </div>
+
+    <!-- Satellite map panel — hidden until button tapped -->
+    <div id="walk-map-panel" style="display:none;margin-bottom:1rem;">
+      <div style="position:relative;">
+        <!-- Map controls row -->
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">
+          <button onclick="findMe()"
+            id="walk-findme-btn"
+            style="display:flex;align-items:center;gap:.35rem;padding:.4rem .75rem;
+                   border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer;
+                   border:1px solid rgba(96,165,250,.4);background:rgba(96,165,250,.12);
+                   color:#93c5fd;font-family:'Source Sans 3',sans-serif;">
+            📍 Find Me
+          </button>
+          <span id="walk-gps-status"
+            style="font-size:.73rem;color:var(--muted);font-style:italic;">
+            Tap to centre map on your position
+          </span>
+        </div>
+        <div id="walk-map" style="height:300px;border-radius:10px;overflow:hidden;
+             border:1px solid var(--border);"></div>
+        <div style="font-size:.68rem;color:var(--muted);margin-top:.3rem;
+             display:flex;justify-content:space-between;">
+          <span>📍 Find Me first, then tap the green to measure distance</span>
+          <span>Imagery © Esri &amp; contributors</span>
+        </div>
+        <div id="walk-map-dist" style="display:none;margin-top:.3rem;text-align:center;
+             font-size:.9rem;font-weight:600;color:#f9a825;
+             background:rgba(0,0,0,.4);border-radius:6px;padding:.35rem;">
+        </div>
+      </div>
+    </div>
+
+    <div id="walk-existing-box" style="display:none;margin-bottom:.75rem;">
+      <div class="lbl">Current saved strategy</div>
+      <div id="walk-existing-text" style="font-size:.85rem;color:#6a9970;font-style:italic;
+           background:rgba(255,255,255,.04);border:1px solid var(--border);
+           border-left:3px solid var(--muted);border-radius:8px;padding:.65rem .75rem;
+           line-height:1.55;"></div>
+    </div>
+
+    <div class="sec" id="walk-strat-lbl">Strategy notes</div>
+
+    <!-- Dictation controls -->
+    <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:.5rem;">
+      <button id="walk-mic-btn"
+        style="display:flex;align-items:center;gap:.4rem;padding:.5rem .85rem;
+               border-radius:8px;font-size:.83rem;font-weight:600;cursor:pointer;
+               border:1px solid var(--border);background:rgba(255,255,255,.08);
+               color:#aaa;font-family:'Source Sans 3',sans-serif;transition:all .2s;"
+        onclick="toggleMic()">🎙 Dictate</button>
+      <span id="walk-mic-status"
+        style="font-size:.75rem;color:var(--muted);font-style:italic;">
+        Tap to speak your strategy
+      </span>
+    </div>
+    <div id="walk-mic-warn" style="display:none;font-size:.75rem;color:#fb923c;
+         margin-bottom:.5rem;line-height:1.5;"></div>
+
+    <textarea id="walk-strat-ta" rows="6"
+      style="min-height:140px;font-size:.92rem;line-height:1.6;margin-bottom:1rem;"
+      placeholder="Describe your strategy for this hole…&#10;&#10;e.g. Driver down the left, avoid the bunker right. Mid-iron to centre green."
+      oninput="walkStratChanged()"></textarea>
+
+    <div class="nav-row">
+      <button class="nav-btn" id="walk-prev-btn" onclick="walkPrev()">← Prev</button>
+      <button class="nav-btn" id="walk-next-btn" onclick="walkNext()">Next →</button>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveWalk()">💾 Save All &amp; Finish</button>
+    <button class="btn btn-danger" style="margin-top:.25rem;" onclick="abandonWalk()">✕ Cancel Walk</button>
+
+    <div style="font-size:.75rem;color:var(--muted);text-align:center;margin-top:.5rem;">
+      Strategies auto-save as you move between holes
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══ EXPORT / IMPORT ══════════════════════════════════════════════════════════ -->
+<div id="exportimport" class="screen">
+<div class="wrap">
+  <div class="back-link" onclick="nav('home')">← Home</div>
+  <h2 style="margin-bottom:.25rem;">Export / Import</h2>
+  <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem;">
+    Send your courses and strategies to Caddy Stats, keep a backup, or load a course file.
+  </p>
+
+  <div class="card">
+    <div style="font-weight:600;color:var(--accent);margin-bottom:.5rem;">📤 Export Course File</div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem;line-height:1.55;">
+      Downloads a <code style="color:var(--accent);font-family:monospace;">.json</code> course file with hole details and strategies.
+      In Caddy Stats, open Export / Import and use <em>Import Course File</em> to load it.
+    </p>
+    <div class="lbl">Courses to include</div>
+    <div id="exp-course-list" style="display:flex;flex-direction:column;gap:.4rem;margin-bottom:.75rem;"></div>
+    <button class="btn btn-primary" onclick="doExport()">⬇ Download Course File</button>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600;color:var(--accent);margin-bottom:.5rem;">📥 Import Courses</div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem;line-height:1.55;">
+      Load a course file, or an old Caddy Planner V30 backup (rounds and history inside it are ignored).
+    </p>
+    <div class="lbl">Select file (.json)</div>
+    <input type="file" id="imp-file" accept=".json" style="margin-bottom:.75rem;padding:.4rem;" onchange="previewImport()"/>
+    <div id="imp-preview" style="display:none;">
+      <div id="imp-summary" style="font-size:.83rem;color:var(--accent);background:rgba(255,255,255,.05);
+           border:1px solid var(--border);border-radius:8px;padding:.75rem;margin-bottom:.75rem;line-height:1.7;"></div>
+      <div class="lbl">How to handle existing courses</div>
+      <select id="imp-mode" style="margin-bottom:.75rem;">
+        <option value="merge">Merge — add new courses, replace any with the same name</option>
+        <option value="replace">Replace — overwrite everything with the imported file</option>
+      </select>
+      <button class="btn btn-primary" onclick="doImport()">⬆ Import Courses</button>
+    </div>
+    <div id="imp-msg" style="font-size:.82rem;margin-top:.5rem;"></div>
+  </div>
+
+  <div class="card" style="border-color:rgba(198,40,40,.25);">
+    <div style="font-weight:600;color:#ef9a9a;margin-bottom:.5rem;">⚠️ Clear All Data</div>
+    <p style="font-size:.83rem;color:var(--muted);margin-bottom:.75rem;line-height:1.55;">
+      Deletes every course and strategy from Caddy Course Planner. Caddy Stats is not affected. Export a course file first!
+    </p>
+    <button class="btn btn-danger" onclick="clearAllData()">🗑 Clear Everything</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════ DATA ═════════════
+const DS={name:"Desert Springs Golf Club",lat:37.3353,lng:-1.9298,holes:[
+  {no:1,par:4,yards:380,si:11,strategy:"Drive down the left-centre. The green is open at the front so a mid-iron approach to the middle gives a straightforward two-putt. Avoid the bunker short-right."},
+  {no:2,par:4,yards:355,si:13,strategy:"Short par 4 — control the driver or take a 3-wood. Wedge approach. Green slopes left to right so aim at the fat of the green and let it feed. Birdie chance."},
+  {no:3,par:3,yards:165,si:17,strategy:"Medium iron, aim centre green. The wind funnels here so take one extra club if in doubt. Do not short-side yourself left — the rough is thick."},
+  {no:4,par:5,yards:505,si:3, strategy:"Lay up with 3-wood to leave a full wedge. The second lay-up area is at 100y. Don't try to reach in two — the green is well guarded. Routine par/birdie chance."},
+  {no:5,par:4,yards:420,si:1, strategy:"Hardest hole on the course. Driver, aim just left of the fairway bunkers. Long approach — take two clubs more than the distance suggests. Par here is excellent."},
+  {no:6,par:4,yards:395,si:7, strategy:"Dogleg right. Aim over the corner with driver or lay back and play it straight. Mid-iron approach. Two-putt par is the target."},
+  {no:7,par:3,yards:185,si:15,strategy:"Longest par 3. Hybrid or rescue into the prevailing breeze. Aim for the centre of the green — anything right falls away. Bogey acceptable here."},
+  {no:8,par:4,yards:365,si:9, strategy:"Another birdie opportunity. 3-iron or hybrid tee shot to the wide part of the fairway. Short approach, attack the flag if below the hole."},
+  {no:9,par:5,yards:530,si:5, strategy:"Strong finish to the front nine. Driver, then lay up to 80-100y. Wedge close and make birdie. Do not force the second shot over the water."},
+  {no:10,par:4,yards:410,si:8,strategy:"Back nine opens with a tough driving hole. OOB left. Aim right-centre with driver. Approach is slightly uphill — take an extra club."},
+  {no:11,par:3,yards:155,si:16,strategy:"Shortest par 3. 8 or 9-iron depending on wind. If pin is front tier, be bold. If back, play to the middle and putt."},
+  {no:12,par:4,yards:375,si:14,strategy:"Drive to the left half to open up the green. Gap wedge or 9-iron. Green is receptive so go at the flag if comfortable."},
+  {no:13,par:5,yards:555,si:2,strategy:"Longest hole. Three full shots needed. Don't be tempted to go for the green in two — there is water left. Patience wins."},
+  {no:14,par:4,yards:400,si:10,strategy:"Straight driving hole. Aim centre fairway. The green has a false front so always be past the pin with the approach."},
+  {no:15,par:4,yards:350,si:18,strategy:"Easiest hole — expect to score here. Attack the flag. A birdie here can be crucial in a competition."},
+  {no:16,par:3,yards:175,si:12,strategy:"The signature par 3. Water front and right. Aim at the centre-back of the green. Bogey is fine, double is a disaster."},
+  {no:17,par:4,yards:385,si:6,strategy:"Penultimate hole often plays into the wind. Driver, then mid-iron. The green is deeper than it looks so trust the yardage."},
+  {no:18,par:5,yards:520,si:4,strategy:"Grandstand finish. Driver down the right. Lay up short of the cross hazard at 220y. Wedge close. Play the situation."}
+]};
+
+// Reads its own store first; on first run it picks up courses saved by Caddy Planner V30 if they share this browser storage
+let courses=JSON.parse(localStorage.getItem('cpp_courses')||'null')||JSON.parse(localStorage.getItem('cp_courses')||'null')||[JSON.parse(JSON.stringify(DS))];
+let activeCourseIdx=0,editingCourseIdx=0,editingStratHole=-1;
+
+function save(){
+  localStorage.setItem('cpp_courses',JSON.stringify(courses));
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// ══════════════════════════════════════════════════════ NAVIGATION ════════════
+function nav(id){
+  if(id==='course-setup')initCourseSetup();
+  if(id==='home')initHome();
+  if(id==='walk')initWalk();
+  if(id==='exportimport')initExport();
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ════════════════════════════════════════════════════════════ HOME ════════════
+function initHome(){
+  document.getElementById('home-course-list').innerHTML=courses.map((c,i)=>{
+    const total=c.holes.length;
+    const planned=c.holes.filter(h=>h.strategy&&h.strategy.trim()).length;
+    const pct=total?Math.round(planned/total*100):0;
+    return `<div style="padding:.65rem 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+        <div style="min-width:0;">
+          <div style="font-weight:600;color:var(--accent);">${esc(c.name)}</div>
+          <div style="font-size:.75rem;color:var(--muted);">${planned} of ${total} holes planned</div>
+        </div>
+        <div style="display:flex;gap:.4rem;flex-shrink:0;">
+          <button class="btn-sm" style="background:rgba(46,125,50,.25);border:1px solid rgba(67,160,71,.35);color:var(--accent);" onclick="walkCourse(${i})">🚶 Walk</button>
+          <button class="btn-sm" style="background:var(--faint);border:1px solid var(--border);color:var(--accent);" onclick="editCourse(${i})">✏️ Edit</button>
+        </div>
+      </div>
+      <div class="bar-track" style="margin-top:.45rem;"><div class="bar-fill" style="width:${pct}%;background:var(--greenlt);"></div></div>
+    </div>`;
+  }).join('');
+}
+function walkCourse(i){
+  nav('walk');
+  document.getElementById('walk-course-sel').value=i;
+  startWalk();
+}
+function editCourse(i){
+  nav('course-setup');
+  document.getElementById('cs-sel').value=i;
+  csCourseChanged();
+}
+
+// ══════════════════════════════════════════════════ COURSE SETUP ══════════════
+function initCourseSetup(){
+  const sel=document.getElementById('cs-sel');
+  sel.innerHTML=courses.map((c,i)=>`<option value="${i}">${c.name}</option>`).join('');
+  editingCourseIdx=0;sel.value=0;csCourseChanged();
+}
+function csCourseChanged(){
+  editingCourseIdx=parseInt(document.getElementById('cs-sel').value);
+  const c=courses[editingCourseIdx];
+  document.getElementById('cs-name').value=c.name;
+  // FIX 4: populate rating/slope fields in Course Manager
+  document.getElementById('cs-cr').value=c.courseRating||'';
+  document.getElementById('cs-slope').value=c.slopeRating||'';
+  document.getElementById('cs-lat').value=c.lat||'';
+  document.getElementById('cs-lng').value=c.lng||'';
+  // Show stored par or calculated from holes
+  const calcPar=c.holes.reduce((a,h)=>a+h.par,0);
+  document.getElementById('cs-par').value=c.coursePar||calcPar||'';
+  const csHint=document.getElementById('cs-par-hint');
+  if(c.coursePar&&c.coursePar!==calcPar){
+    csHint.textContent=`⚠️ Hole pars add up to ${calcPar} — check individual hole pars below`;
+    csHint.style.color='#fb923c';
+  } else {
+    csHint.textContent=`✓ Hole pars add up to ${calcPar}`;
+    csHint.style.color='var(--muted)';
+  }
+  renderCsHoles();
+  document.getElementById('cs-strat-editor').style.display='none';
+  document.getElementById('cs-paste-msg').textContent='';
+}
+function renderCsHoles(){
+  const holes=courses[editingCourseIdx].holes;
+  document.getElementById('cs-hole-rows').innerHTML=holes.map((h,i)=>`
+    <div class="hole-setup-row">
+      <span style="color:var(--muted);font-weight:700;">${h.no}</span>
+      <input type="number" min="3" max="5" value="${h.par}" onchange="courses[${editingCourseIdx}].holes[${i}].par=parseInt(this.value)"/>
+      <input type="number" min="50" max="700" value="${h.yards}" onchange="courses[${editingCourseIdx}].holes[${i}].yards=parseInt(this.value)"/>
+      <input type="number" min="1" max="18" value="${h.si}" onchange="courses[${editingCourseIdx}].holes[${i}].si=parseInt(this.value)"/>
+      <button class="btn-sm" style="background:${h.strategy?'rgba(46,125,50,.3)':'var(--faint)'};
+        border:1px solid ${h.strategy?'var(--greenlt)':'var(--border)'};
+        color:${h.strategy?'var(--accent)':'#aaa'};width:100%;text-align:left;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+        onclick="openStratEditor(${i})">
+        ${h.strategy?'✏️ '+h.strategy.slice(0,28)+(h.strategy.length>28?'…':''):'+ Add strategy'}
+      </button>
+    </div>`).join('');
+}
+function openStratEditor(i){
+  editingStratHole=i;
+  const h=courses[editingCourseIdx].holes[i];
+  document.getElementById('cs-strat-title').textContent=`Hole ${h.no} — Strategy`;
+  document.getElementById('cs-strat-text').value=h.strategy||'';
+  document.getElementById('cs-strat-editor').style.display='block';
+  setTimeout(()=>document.getElementById('cs-strat-editor').scrollIntoView({behavior:'smooth'}),50);
+}
+function closeStratEditor(){
+  if(editingStratHole>=0){
+    courses[editingCourseIdx].holes[editingStratHole].strategy=document.getElementById('cs-strat-text').value.trim();
+    editingStratHole=-1;
+  }
+  document.getElementById('cs-strat-editor').style.display='none';renderCsHoles();
+}
+function saveCourse(){
+  closeStratEditor();
+  const c=courses[editingCourseIdx];
+  c.name=document.getElementById('cs-name').value.trim()||c.name;
+  // FIX 4: save rating/slope from Course Manager fields
+  c.courseRating=parseFloat(document.getElementById('cs-cr').value)||null;
+  c.slopeRating=parseInt(document.getElementById('cs-slope').value)||null;
+  c.coursePar=parseInt(document.getElementById('cs-par').value)||null;
+  c.lat=parseFloat(document.getElementById('cs-lat').value)||null;
+  c.lng=parseFloat(document.getElementById('cs-lng').value)||null;
+  save();initHome();showMsg('cs-paste-msg','✅ Course saved.','#4ade80');
+}
+function addNewCourse(){
+  courses.push({name:'New Course',holes:Array.from({length:18},(_,i)=>({no:i+1,par:4,yards:400,si:i+1,strategy:''}))});
+  save();initCourseSetup();
+  document.getElementById('cs-sel').value=courses.length-1;csCourseChanged();
+}
+function deleteCourse(){
+  if(courses.length<=1){alert('You need at least one course.');return;}
+  if(!confirm(`Delete "${courses[editingCourseIdx].name}"?`))return;
+  courses.splice(editingCourseIdx,1);save();
+  editingCourseIdx=0;activeCourseIdx=0;initCourseSetup();initHome();
+}
+function parsePaste(){
+  const raw=document.getElementById('cs-paste').value.trim();
+  if(!raw){showMsg('cs-paste-msg','Nothing to import.','#f87171');return;}
+  const lines=raw.split('\n').filter(l=>l.trim());
+  let count=0;
+  for(const line of lines){
+    const cols=line.includes('\t')?line.split('\t'):line.split(',');
+    if(cols.length<4)continue;
+    const no=parseInt(cols[0]),par=parseInt(cols[1]),yards=parseInt(cols[2]),si=parseInt(cols[3]);
+    const strategy=cols.slice(4).join(',').trim().replace(/^"|"$/g,'');
+    if(isNaN(no)||isNaN(par)||isNaN(yards)||isNaN(si))continue;
+    const idx=courses[editingCourseIdx].holes.findIndex(h=>h.no===no);
+    const target=idx>=0?idx:(no>=1&&no<=18?no-1:-1);
+    if(target>=0){courses[editingCourseIdx].holes[target]={...courses[editingCourseIdx].holes[target],no,par,yards,si,strategy};count++;}
+  }
+  if(!count){showMsg('cs-paste-msg','No valid rows found.','#f87171');return;}
+  save();renderCsHoles();document.getElementById('cs-paste').value='';
+  showMsg('cs-paste-msg',`✅ ${count} holes imported.`,'#4ade80');
+}
+function showMsg(id,msg,color){
+  const el=document.getElementById(id);el.textContent=msg;el.style.color=color;
+  setTimeout(()=>el.textContent='',5000);
+}
+
+// ════════════════════════════════════════════════════ COURSE WALK ════════════
+let walkCourseIdx=0, walkHoleIdx=0, walkStrategies=[];
+
+function initWalk(){
+  const sel=document.getElementById('walk-course-sel');
+  sel.innerHTML=courses.map((c,i)=>`<option value="${i}">${c.name}</option>`).join('');
+  sel.value=0;
+  document.getElementById('walk-sel-panel').style.display='block';
+  document.getElementById('walk-play-panel').style.display='none';
+}
+
+function startWalk(){
+  walkCourseIdx=parseInt(document.getElementById('walk-course-sel').value);
+  walkHoleIdx=0;
+  walkStrategies=courses[walkCourseIdx].holes.map(h=>h.strategy||'');
+  document.getElementById('walk-sel-panel').style.display='none';
+  document.getElementById('walk-play-panel').style.display='block';
+  renderWalkHole();
+}
+
+function walkStratChanged(){
+  walkStrategies[walkHoleIdx]=document.getElementById('walk-strat-ta').value;
+}
+
+function autoSave(){
+  walkStrategies[walkHoleIdx]=document.getElementById('walk-strat-ta').value;
+}
+
+function walkPrev(){
+  if(walkHoleIdx<=0)return;
+  autoSave();stopMic();walkHoleIdx--;renderWalkHole();
+}
+
+function walkNext(){
+  if(walkHoleIdx>=courses[walkCourseIdx].holes.length-1)return;
+  autoSave();stopMic();walkHoleIdx++;renderWalkHole();
+}
+
+function walkJump(i){
+  autoSave();stopMic();walkHoleIdx=i;renderWalkHole();
+}
+
+function saveWalk(){
+  autoSave();
+  stopMic();destroyMap();
+  const course=courses[walkCourseIdx];
+  let updated=0;
+  walkStrategies.forEach((s,i)=>{
+    if(s.trim()!==course.holes[i].strategy){
+      course.holes[i].strategy=s.trim();
+      updated++;
+    }
+  });
+  save();
+  nav('home');
+  setTimeout(()=>alert(updated>0
+    ?`✅ Walk complete — ${updated} hole strateg${updated!==1?'ies':'y'} saved to ${course.name}.`
+    :'Walk complete — no strategy changes were made.'),150);
+}
+
+function abandonWalk(){
+  if(!confirm('Cancel the walk?\n\nUnsaved changes will be lost.'))return;
+  stopMic();destroyMap();
+  nav('home');
+}
+
+// ─── SPEECH RECOGNITION ──────────────────────────────────────────────────────
+let micRec=null, micOn=false;
+
+function toggleMic(){
+  micOn ? stopMic() : startMic();
+}
+
+function startMic(){
+  const SRC=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const warn=document.getElementById('walk-mic-warn');
+  if(!SRC){
+    warn.style.display='block';
+    warn.textContent='⚠️ Voice dictation is not available in this browser or context. '
+      +'For dictation to work, the app must be served over HTTPS or localhost — '
+      +'opening as a local file (file://) blocks microphone access. '
+      +'Try hosting via GitHub Pages or a local server.';
+    return;
+  }
+  warn.style.display='none';
+  micRec=new SRC();
+  micRec.continuous=true;
+  micRec.interimResults=true;
+  micRec.lang='en-GB';
+  let finalText='';
+
+  micRec.onstart=()=>{
+    micOn=true;
+    finalText=document.getElementById('walk-strat-ta').value;
+    setMicUI(true);
+  };
+
+  micRec.onresult=(e)=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal){
+        const joined=finalText&&!finalText.endsWith(' ')?finalText+' ':finalText;
+        finalText=joined+t.charAt(0).toUpperCase()+t.slice(1);
+      } else {
+        interim+=t;
+      }
+    }
+    const ta=document.getElementById('walk-strat-ta');
+    ta.value=finalText+(interim?' …'+interim:'');
+    walkStrategies[walkHoleIdx]=ta.value;
+  };
+
+  micRec.onerror=(e)=>{
+    micOn=false;
+    setMicUI(false);
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      warn.style.display='block';
+      warn.textContent='⚠️ Microphone access was denied. '
+        +'Please allow microphone access in your browser settings, '
+        +'or ensure the app is running over HTTPS / localhost.';
+    }
+    micRec=null;
+  };
+
+  micRec.onend=()=>{
+    // Tidy up any dangling interim marker
+    const ta=document.getElementById('walk-strat-ta');
+    if(ta.value.includes(' …')){
+      ta.value=ta.value.split(' …')[0];
+      walkStrategies[walkHoleIdx]=ta.value;
+    }
+    micOn=false;
+    setMicUI(false);
+    micRec=null;
+  };
+
+  try{ micRec.start(); }
+  catch(e){ console.warn('mic start error',e); }
+}
+
+function stopMic(){
+  if(micRec){ try{ micRec.stop(); }catch(e){} micRec=null; }
+  micOn=false;
+  setMicUI(false);
+}
+
+function setMicUI(on){
+  const btn=document.getElementById('walk-mic-btn');
+  const status=document.getElementById('walk-mic-status');
+  if(!btn)return;
+  if(on){
+    btn.textContent='⏹ Stop Dictating';
+    btn.classList.add('mic-listening');
+    status.textContent='🔴 Listening — speak your strategy…';
+    status.style.color='#f87171';
+  } else {
+    btn.textContent='🎙 Dictate';
+    btn.classList.remove('mic-listening');
+    status.textContent='Tap to speak your strategy';
+    status.style.color='';
+  }
+}
+
+// ════════════════════════════════════════════════════ SATELLITE MAP ═══════════
+let walkMap=null, walkMapOpen=false, greenMarker=null, tapMarker=null, playerMarker=null;
+
+function renderWalkHole(){
+  const course=courses[walkCourseIdx];
+  const hole=course.holes[walkHoleIdx];
+  const filled=walkStrategies.filter(s=>s.trim()).length;
+
+  document.getElementById('walk-course-name').textContent=course.name;
+  document.getElementById('walk-progress-txt').textContent=
+    `Hole ${walkHoleIdx+1} of ${course.holes.length} · ${filled} strateg${filled!==1?'ies':'y'} recorded`;
+
+  document.getElementById('walk-dots').innerHTML=course.holes.map((_,i)=>{
+    const hasTxt=walkStrategies[i]&&walkStrategies[i].trim();
+    const cls=i===walkHoleIdx?'dot dot-active':hasTxt?'dot dot-done':'dot dot-todo';
+    return `<div class="${cls}" onclick="walkJump(${i})" title="Hole ${i+1}"></div>`;
+  }).join('');
+
+  document.getElementById('walk-holenum').textContent=hole.no;
+  const pb=document.getElementById('walk-par-badge');
+  pb.textContent=`Par ${hole.par}`;
+  pb.className='par-badge '+(hole.par===3?'par3':hole.par===4?'par4':'par5');
+  document.getElementById('walk-yards-si').textContent=`${hole.yards}y · SI ${hole.si}`;
+
+  // Show map button only if course has GPS coordinates
+  const hasGPS=!!(course.lat&&course.lng);
+  document.getElementById('walk-map-btn-wrap').style.display=hasGPS?'flex':'none';
+
+  // Close map when changing holes
+  if(walkMapOpen) closeMap();
+
+  const saved=course.holes[walkHoleIdx].strategy||'';
+  const existBox=document.getElementById('walk-existing-box');
+  if(saved){
+    existBox.style.display='block';
+    document.getElementById('walk-existing-text').textContent=saved;
+  } else {
+    existBox.style.display='none';
+  }
+  document.getElementById('walk-strat-lbl').textContent=saved?'Edit strategy':'New strategy notes';
+  document.getElementById('walk-strat-ta').value=walkStrategies[walkHoleIdx];
+  document.getElementById('walk-prev-btn').disabled=walkHoleIdx===0;
+  document.getElementById('walk-next-btn').disabled=walkHoleIdx===course.holes.length-1;
+}
+
+function toggleMap(){
+  walkMapOpen ? closeMap() : openMap();
+}
+
+function openMap(){
+  const course=courses[walkCourseIdx];
+  if(!course.lat||!course.lng){return;}
+  const panel=document.getElementById('walk-map-panel');
+  const btn=document.getElementById('walk-map-btn');
+  panel.style.display='block';
+  btn.textContent='🛰 Hide Map';
+  walkMapOpen=true;
+
+  setTimeout(()=>{
+    if(!walkMap){
+      walkMap=L.map('walk-map',{zoomControl:true,attributionControl:true});
+      L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution:'Tiles © Esri — Maxar, Earthstar Geographics, GIS User Community',
+          maxZoom:20 }
+      ).addTo(walkMap);
+      walkMap.on('click', onMapTap);
+    }
+
+    walkMap.setView([course.lat, course.lng], 17);
+
+    if(greenMarker){ walkMap.removeLayer(greenMarker); greenMarker=null; }
+    if(tapMarker){ walkMap.removeLayer(tapMarker); tapMarker=null; }
+    if(playerMarker){ walkMap.removeLayer(playerMarker); playerMarker=null; }
+    if(walkMap._distLine){ walkMap.removeLayer(walkMap._distLine); }
+    document.getElementById('walk-map-dist').style.display='none';
+    document.getElementById('walk-gps-status').textContent='1. Tap Find Me  2. Tap any point on the map to measure distance from you';
+
+    walkMap.invalidateSize();
+  }, 100);
+}
+
+function closeMap(){
+  document.getElementById('walk-map-panel').style.display='none';
+  document.getElementById('walk-map-btn').textContent='🛰 View Map';
+  walkMapOpen=false;
+  document.getElementById('walk-map-dist').style.display='none';
+}
+
+function findMe(){
+  const statusEl=document.getElementById('walk-gps-status');
+  const btn=document.getElementById('walk-findme-btn');
+
+  if(!navigator.geolocation){
+    statusEl.textContent='⚠️ GPS not available in this browser.';
+    statusEl.style.color='#fb923c';
+    return;
+  }
+
+  statusEl.textContent='📡 Locating…';
+  statusEl.style.color='#93c5fd';
+  btn.style.opacity='.6';
+
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      const lat=pos.coords.latitude;
+      const lng=pos.coords.longitude;
+      const acc=Math.round(pos.coords.accuracy);
+
+      // Centre map on player's position
+      if(walkMap) walkMap.setView([lat, lng], 18);
+
+      // Remove old player marker
+      if(playerMarker){ walkMap.removeLayer(playerMarker); }
+
+      // Add a blue pulsing dot for the player
+      playerMarker=L.marker([lat, lng],{
+        icon: L.divIcon({
+          html:`<div style="width:18px;height:18px;border-radius:50%;
+                background:#3b82f6;border:3px solid #fff;
+                box-shadow:0 0 0 4px rgba(59,130,246,.35);"></div>`,
+          iconSize:[18,18], iconAnchor:[9,9], className:''
+        })
+      }).addTo(walkMap).bindTooltip(`You are here (±${acc}m)`,{permanent:false});
+
+      statusEl.textContent=`📍 Located (±${acc}m accuracy)`;
+      statusEl.style.color='#4ade80';
+      btn.style.opacity='1';
+
+      // If accuracy is poor, warn the user
+      if(acc>50){
+        statusEl.textContent=`📍 Located but accuracy is low (±${acc}m) — move to open sky`;
+        statusEl.style.color='#fb923c';
+      }
+    },
+    (err)=>{
+      btn.style.opacity='1';
+      if(err.code===1){
+        statusEl.textContent='⚠️ Location access denied — allow it in browser settings.';
+      } else if(err.code===2){
+        statusEl.textContent='⚠️ Position unavailable — are you outdoors with GPS signal?';
+      } else {
+        statusEl.textContent='⚠️ Location timed out — try again.';
+      }
+      statusEl.style.color='#fb923c';
+    },
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+  );
+}
+
+function onMapTap(e){
+  const tapPos=e.latlng;
+
+  // Remove previous tap marker and line
+  if(tapMarker){ walkMap.removeLayer(tapMarker); }
+  if(walkMap._distLine){ walkMap.removeLayer(walkMap._distLine); }
+
+  // Place a green flag marker where the user tapped (this is the target — e.g. the green)
+  tapMarker=L.marker(tapPos,{
+    icon: L.divIcon({
+      html:'<div style="font-size:1.4rem;line-height:1;">⛳</div>',
+      iconSize:[28,28], iconAnchor:[14,28], className:''
+    })
+  }).addTo(walkMap).bindTooltip('Tapped target',{permanent:false});
+
+  const distEl=document.getElementById('walk-map-dist');
+
+  // If we have the player's live position, measure from there to the tapped point
+  if(playerMarker){
+    const playerPos=playerMarker.getLatLng();
+    const metres=playerPos.distanceTo(tapPos);
+    const yards=Math.round(metres*1.09361);
+
+    // Draw dashed line from player to tapped target
+    walkMap._distLine=L.polyline([playerPos, tapPos],{
+      color:'#f9a825', weight:2, dashArray:'6,4', opacity:0.8
+    }).addTo(walkMap);
+
+    distEl.style.display='block';
+    distEl.textContent=`📏 ${yards} yards from you to tapped point (approx.)`;
+  } else {
+    // No GPS fix yet — prompt the user
+    distEl.style.display='block';
+    distEl.textContent='📍 Tap "Find Me" first to get your position, then tap your target to measure distance.';
+    distEl.style.color='#fb923c';
+  }
+}
+
+function destroyMap(){
+  if(walkMap){ walkMap.remove(); walkMap=null; }
+  greenMarker=null; tapMarker=null; playerMarker=null; walkMapOpen=false;
+}
+
+// ══════════════════════════════════════════════════ EXPORT / IMPORT ══════════
+function initExport(){
+  document.getElementById('exp-course-list').innerHTML=courses.map((c,i)=>
+    `<label style="display:flex;align-items:center;gap:.6rem;font-size:.88rem;cursor:pointer;">
+      <input type="checkbox" class="exp-c" value="${i}" checked style="width:auto;accent-color:var(--greenlt);"/> ${esc(c.name)}
+    </label>`).join('');
+  resetImport();
+}
+function doExport(){
+  const picked=[...document.querySelectorAll('.exp-c:checked')].map(el=>courses[parseInt(el.value)]);
+  if(!picked.length){alert('Tick at least one course to export.');return;}
+  const payload={
+    _app:'CaddyCourses',_version:1,_exported:new Date().toISOString(),
+    courses:picked.map(c=>({
+      name:c.name,lat:c.lat||null,lng:c.lng||null,
+      courseRating:c.courseRating||null,slopeRating:c.slopeRating||null,coursePar:c.coursePar||null,
+      holes:c.holes.map(h=>({no:h.no,par:h.par,yards:h.yards,si:h.si,strategy:h.strategy||''}))
+    }))
+  };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='caddy-courses-'+new Date().toISOString().split('T')[0]+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+let importedPayload=null;
+function resetImport(){
+  importedPayload=null;
+  const f=document.getElementById('imp-file');if(f)f.value='';
+  document.getElementById('imp-preview').style.display='none';
+  document.getElementById('imp-msg').textContent='';
+}
+function previewImport(){
+  const file=document.getElementById('imp-file').files[0];
+  const preview=document.getElementById('imp-preview');
+  const summary=document.getElementById('imp-summary');
+  document.getElementById('imp-msg').textContent='';
+  importedPayload=null;preview.style.display='none';
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if((data._app!=='CaddyCourses'&&data._app!=='CaddyPlanner')||!Array.isArray(data.courses)||!data.courses.length){
+        summary.textContent='⚠️ This is not a course file or a Caddy Planner backup.';
+        summary.style.color='#f87171';preview.style.display='block';return;
+      }
+      importedPayload=data;
+      const have=new Set(courses.map(c=>c.name));
+      summary.innerHTML=data.courses.map(c=>{
+        const n=(c.holes||[]).filter(h=>h.strategy&&h.strategy.trim()).length;
+        const tag=have.has(c.name)?'<span style="color:#ffe082;">(replaces your copy)</span>':'<span style="color:#4ade80;">(new)</span>';
+        return `⛳ ${esc(c.name)} — ${n} hole strateg${n!==1?'ies':'y'} ${tag}`;
+      }).join('<br/>');
+      summary.style.color='var(--accent)';
+      preview.style.display='block';
+    }catch(err){
+      summary.textContent='⚠️ Could not read file — is it a valid .json file?';
+      summary.style.color='#f87171';preview.style.display='block';
+    }
+  };
+  reader.readAsText(file);
+}
+function doImport(){
+  if(!importedPayload){alert('No valid file loaded.');return;}
+  const mode=document.getElementById('imp-mode').value;
+  if(!confirm('This will '+(mode==='replace'?'REPLACE all your courses':'MERGE with your courses')+'.\n\nAre you sure?'))return;
+  const incoming=importedPayload.courses.filter(c=>c&&c.name&&Array.isArray(c.holes));
+  if(!incoming.length){alert('No usable courses in this file.');return;}
+  if(mode==='replace'){
+    courses=JSON.parse(JSON.stringify(incoming));
+  } else {
+    incoming.forEach(c=>{
+      const idx=courses.findIndex(x=>x.name===c.name);
+      if(idx>=0)courses[idx]=JSON.parse(JSON.stringify(c));
+      else courses.push(JSON.parse(JSON.stringify(c)));
+    });
+  }
+  save();initHome();
+  resetImport();
+  const m=document.getElementById('imp-msg');
+  m.textContent='✅ Import complete — '+incoming.length+' course'+(incoming.length!==1?'s':'')+'.';
+  m.style.color='#4ade80';
+}
+function clearAllData(){
+  if(!confirm('⚠️ This will permanently delete ALL courses and strategies in Caddy Course Planner.\n\nExport a course file first!\n\nAre you absolutely sure?'))return;
+  if(!confirm('Last chance — really delete everything?'))return;
+  localStorage.removeItem('cpp_courses');
+  courses=[JSON.parse(JSON.stringify(DS))];
+  save();nav('home');
+}
+
+// ══════════════════════════════════════════════════════════ BOOT ══════════════
+initHome();
+</script>
+</body>
+</html>
